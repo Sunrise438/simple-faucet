@@ -1,553 +1,421 @@
-<?php
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><?php echo $data["name"]; ?></title>
+<script src="//cdn.jsdelivr.net/jquery/2.1.4/jquery.min.js"></script>
+<script type="text/javascript" src="libs/mmc.js"></script>
+<link href='http://fonts.googleapis.com/css?family=Roboto:400,300,500' rel='stylesheet' type='text/css'>
+<style>
 
-require_once("script/common.php");
-
-if (!$pass) {
-    // first run
-    header("Location: admin.php");
-    die("Please wait...");
+body{
+padding: 0;
+margin: 0;
+font-family: 'Roboto', sans-serif;
+background: #415160;
 }
 
-if (array_key_exists("p", $_GET) && in_array($_GET["p"], ["admin", "password-reset"])) {
-    header("Location: admin.php?p={$_GET["p"]}");
-    die("Please wait...");
+.wf{
+max-width: 1200px;
+margin: 0 auto;
 }
 
-#reCaptcha template
-$recaptcha_template = <<<TEMPLATE
-<script src="https://www.google.com/recaptcha/api.js" async defer></script>
-<div class="g-recaptcha" data-sitekey="<:: your_site_key ::>"></div>
-<noscript>
-  <div style="width: 302px; height: 352px;">
-    <div style="width: 302px; height: 352px; position: relative;">
-      <div style="width: 302px; height: 352px; position: absolute;">
-        <iframe src="https://www.google.com/recaptcha/api/fallback?k=<:: your_site_key ::>"
-                frameborder="0" scrolling="no"
-                style="width: 302px; height:352px; border-style: none;">
-        </iframe>
-      </div>
-      <div style="width: 250px; height: 80px; position: absolute; border-style: none;
-                  bottom: 21px; left: 25px; margin: 0px; padding: 0px; right: 25px;">
-        <textarea id="g-recaptcha-response" name="g-recaptcha-response"
-                  class="g-recaptcha-response"
-                  style="width: 250px; height: 80px; border: 1px solid #c1c1c1;
-                         margin: 0px; padding: 0px; resize: none;" value="">
-        </textarea>
-      </div>
-    </div>
-  </div>
-</noscript>
-TEMPLATE;
-
-if (!empty($_POST["mmc"])) {
-    $_SESSION["$session_prefix-mouse_movement_detected"] = true;
-    die();
+#top-ad{
+padding: 2% 0;
 }
 
-
-// Check functions
-
-function checkTimeForIP($ip, &$time_left = NULL) {
-    global $sql, $data;
-    $q = $sql->prepare("SELECT TIMESTAMPDIFF(MINUTE, last_used, CURRENT_TIMESTAMP()) FROM Faucetinabox_IPs WHERE ip = ?");
-    $q->execute([$ip]);
-    if ($time = $q->fetch()) {
-        $time = intval($time[0]);
-        $required = intval($data["timer"]);
-        
-        $time_left = $required-$time;
-        return $time >= intval($data["timer"]);
-    } else {
-        $time_left = 0;
-        return true;
-    }
+#top-ad .ad-placeholder{
+width: 728px;
+height: 90px;
+background: #5C6C7A;
+margin: 0 auto;
+text-align: center;
+font-size: 95px;
+line-height: 90px;
+color: #475563;
+letter-spacing: -18px;
+word-spacing: 25px;
 }
 
-function checkTimeForAddress($address, &$time_left) {
-    global $sql, $data;
-    $q = $sql->prepare("SELECT TIMESTAMPDIFF(MINUTE, last_used, CURRENT_TIMESTAMP()) FROM Faucetinabox_Addresses WHERE `address` = ?");
-    $q->execute([$address]);
-    if ($time = $q->fetch()) {
-        $time = intval($time[0]);
-        $required = intval($data["timer"]);
-
-        $time_left = $required-$time;
-        return $time >= intval($data["timer"]);
-    } else {
-        $time_left = 0;
-        return true;
-    }
+#right-ad .ad-placeholder{
+width: 160px;
+height: 600px;
+background: #5C6C7A;
+margin-left: auto;
+text-align: center;
+font-size: 50px;
+line-height: 47px;
+color: #475563;
+box-sizing: border-box;
+padding: 20px 0;
 }
 
-function checkAddressValidity($address) {
-    global $data;
-
-    if($data['service'] === "epay") return true;
-
-    return (preg_match("/^[0-9A-Za-z]{26,34}$/", $address) === 1);
+#page{
+padding: 2% 3%;
+min-height: 100%;
+border: 3px solid #2B3947;
+background: #151F2A;
+color: #B7C9DA;
+box-shadow: 0 0 10px #1F1F1F;
 }
 
-function checkAddressBlacklist($address) {
-    global $security_settings;
-    return !in_array($address, $security_settings["address_ban_list"]);
+#page a{
+color: #B7C9DA;
 }
 
-function checkIPIsWhitelisted() {
-    global $security_settings;
-    $ip = ip2long(getIP());
-    if ($ip) { // only ipv4 supported here
-        foreach ($security_settings["ip_white_list"] as $whitelisted) {
-            if (ipSubnetCheck($ip, $whitelisted)) {
-                return true;
-            }
-        }
-    }
-    return false;
+#page-cols{
+width: 100%;
+margin-collapse: collapse;
 }
 
-function checkIPBlacklist() {
-    global $security_settings;
-    $ip = ip2long(getIP());
-    if ($ip) { // only ipv4 supported here
-        foreach ($security_settings["ip_ban_list"] as $ban) {
-            if (ipSubnetCheck($ip, $ban)) {
-                trigger_error("Banned: ".getIP()." (blacklist: {$ban})");
-                return false;
-            }
-        }
-    }
-    return true;
+#page-cols .page-col-ad{
+width: 200px;
 }
 
-function checkNastyHosts() {
-    global $security_settings;
-    if ($security_settings["nastyhosts_enabled"]) {
-        $hostnames = @file_get_contents(getNastyHostsServer().getIP().'?source=fiab');
-        $hostnames = json_decode($hostnames);
-        
-        if ($hostnames && property_exists($hostnames, "status") && $hostnames->status == 200) {
-            if (property_exists($hostnames, "suggestion") && $hostnames->suggestion == "deny") {
-                trigger_error("Banned: ".getIP()." (NastyHosts)");
-                return false;
-            }
-            if (property_exists($hostnames, "asn") && property_exists($hostnames->asn, "asn")) {
-                foreach ($security_settings["asn_ban_list"] as $ban) {
-                    if ($ban == $hostnames->asn->asn) {
-                        trigger_error("Banned: ".getIP()." (ASN: {$ban})");
-                        return false;
-                    }
-                }
-            }
-            if (property_exists($hostnames, "country") && property_exists($hostnames->country, "code")) {
-                foreach ($security_settings["country_ban_list"] as $ban) {
-                    if ($ban == $hostnames->country->code) {
-                        trigger_error("Banned: ".getIP()." (country: {$ban})");
-                        return false;
-                    }
-                }
-            }
-            if (property_exists($hostnames, "hostnames")) {
-                foreach ($security_settings["hostname_ban_list"] as $ban) {
-                    foreach ($hostnames->hostnames as $hostname) {
-                        if (stripos($hostname, $ban) !== false) {
-                            trigger_error("Banned: ".getIP()." (hostname: {$ban})");
-                            return false;
-                        }
-                    }
-                }
-            }
-        } else {
-            // nastyhosts down or status != 200
-            trigger_error("Couldn't connect to NastyHost, refusing to payout!");
-            return false;
-        }
-    }
-    return true;
+#page-cols .page-col-body{
+vertical-align: top;
 }
 
-function checkCaptcha() {
-    global $data, $captcha;
-    
-    switch ($captcha["selected"]) {
-        case "SolveMedia":
-            require_once("libs/solvemedialib.php");
-            $resp = solvemedia_check_answer(
-                $data["solvemedia_verification_key"],
-                getIP(),
-                (array_key_exists("adcopy_challenge", $_POST) ? $_POST["adcopy_challenge"] : ""),
-                (array_key_exists("adcopy_response", $_POST) ? $_POST["adcopy_response"] : ""),
-                $data["solvemedia_auth_key"]
-            );
-            return $resp->is_valid;
-        break;
-        case "reCaptcha":
-            $url = "https://www.google.com/recaptcha/api/siteverify?secret=".$data["recaptcha_private_key"]."&response=".(array_key_exists("g-recaptcha-response", $_POST) ? $_POST["g-recaptcha-response"] : "")."&remoteip=".getIP();
-            $resp = json_decode(file_get_contents($url), true);
-            return $resp["success"];
-        break;
-        case "FunCaptcha":
-            require_once("libs/funcaptcha.php");
-            $funcaptcha = new FUNCAPTCHA();
-            return $funcaptcha->checkResult($data["funcaptcha_private_key"]);
-        break;
-    }
-    
-    return false;
+#header{
+text-align: center;
+padding-bottom: 3%;
 }
 
-function releaseAddressLock($address) {
-    global $sql;
-    $q = $sql->prepare("DELETE FROM Faucetinabox_Address_Locks WHERE address = ?");
-    $q->execute([$address]);
+#header .name{
+font-size: 60px;
+font-weight: 500;
 }
 
-function claimAddressLock($address) {
-    global $sql;
-    $q = $sql->prepare("DELETE FROM Faucetinabox_Address_Locks WHERE address = ? AND TIMESTAMPDIFF(MINUTE, locked_since, CURRENT_TIMESTAMP()) > 5");
-    $q->execute([$address]);
-    $q = $sql->prepare("INSERT INTO Faucetinabox_Address_Locks (address, locked_since) VALUES (?, CURRENT_TIMESTAMP())");
-    try {
-        $q->execute([$address]);
-    } catch (PDOException $e) {
-        if($e->getCode() == 23000) {
-            return false;
-        } else {
-            throw $e;
-        }
-    }
-    register_shutdown_function("releaseAddressLock", $address);
-    return true;
+#header .short-desc{
+margin-top: -10px;
+font-size: 16px;
+letter-spacing: 2px;
+font-weight: 300;
+margin-bottom: 10px;
 }
 
-function releaseIPLock($ip) {
-    global $sql;
-    $q = $sql->prepare("DELETE FROM Faucetinabox_IP_Locks WHERE ip = ?");
-    $q->execute([$ip]);
+p.rewards{
+margin-top: 0;
+background: #354455;
+padding: 12px 18px;
+font-size: 25px;
+font-weight: 300;
+border-left: 8px solid #7A8EA1;
 }
 
-function claimIPLock($ip) {
-    global $sql;
-    $q = $sql->prepare("DELETE FROM Faucetinabox_IP_Locks WHERE ip = ? AND TIMESTAMPDIFF(MINUTE, locked_since, CURRENT_TIMESTAMP()) > 5");
-    $q->execute([$ip]);
-    $q = $sql->prepare("INSERT INTO Faucetinabox_IP_Locks (ip, locked_since) VALUES (?, CURRENT_TIMESTAMP())");
-    try {
-        $q->execute([$ip]);
-    } catch (PDOException $e) {
-        if($e->getCode() == 23000) {
-            return false;
-        } else {
-            throw $e;
-        }
-    }
-    register_shutdown_function("releaseIPLock", $ip);
-    return true;
+p.rewards > span{
+font-size: .6em;
 }
 
-function getClaimError($address) {
-    if (!claimAddressLock($address)) {
-        return "You were locked for multiple claims, try again in 5 minutes.";
-    }
-    if (!claimIPLock(getIP())) {
-        return "You were locked for multiple claims, try again in 5 minutes.";
-    }
-    if (!checkAddressValidity($address)) {
-        return "Invalid address";
-    }
-    if (!checkCaptcha()) {
-        return "Invalid captcha code";
-    }
-    if (!checkTimeForAddress($address, $time_left)) {
-        return "You have to wait {$time_left} minutes";
-    }
-    if (!checkTimeForIP(getIP(), $time_left)) {
-        return "You have to wait {$time_left} minutes";
-    }
-    if (!checkAddressBlacklist($address)) {
-        return "Unknown error.";
-    }
-    if(!checkIPIsWhitelisted()) {
-        if (!checkIPBlacklist()) {
-            return "Unknown error.";
-        }
-        if (!checkNastyHosts()) {
-            return "Unknown error.";
-        }
-    }
-    return null;
+input{
+font-family: 'Roboto', sans-serif;
+outline: none;
+border: 0;
+padding: 10px 15px;
 }
 
+form{
+text-align: center;
 
-
-// Get template
-$q = $sql->query("SELECT value FROM Faucetinabox_Settings WHERE name = 'template'");
-$template = $q->fetch();
-$template = $template[0];
-if (!file_exists("templates/{$template}/index.php")) {
-    $templates = glob("templates/*");
-    if ($templates)
-        $template = substr($templates[0], strlen("templates/"));
-    else
-        die(str_replace('<:: content ::>', "<div class='alert alert-danger' role='alert'>No templates found!</div>", $master_template));
 }
 
-
-// Check protocol
-if (array_key_exists("HTTPS", $_SERVER) && $_SERVER["HTTPS"])
-    $protocol = "https://";
-else
-    $protocol = "http://";
-
-
-// Get address
-if (array_key_exists("$session_prefix-address_input_name", $_SESSION) && array_key_exists($_SESSION["$session_prefix-address_input_name"], $_POST)) {
-    $_POST["address"] = $_POST[$_SESSION["$session_prefix-address_input_name"]];
-} else {
-    if ($_SERVER['REQUEST_METHOD'] == "POST") {
-        if (array_key_exists("$session_prefix-address_input_name", $_SESSION)) {
-            trigger_error("Post request, but invalid address input name.");
-        } else {
-            trigger_error("Post request, but session is invalid.");
-        }
-    }
-    unset($_POST["address"]);
+.main-input{
+display: block;
+margin: 5px 0;
+width: 100%;
+box-sizing: border-box;
+background: #FC3A51;
+font-size: 25px;
+font-weight: 300;
+text-align: center;
+border-bottom: 5px solid #B4192B;
 }
 
-
-$data = array(
-    "paid" => false,
-    "disable_admin_panel" => $disable_admin_panel,
-    "address" => "",
-    "captcha_valid" => true, //for people who won't update templates
-    "captcha" => false,
-    "enabled" => false,
-    "error" => false,
-    "address_eligible" => true,
-    "reflink" => $protocol.$_SERVER['HTTP_HOST'].strtok($_SERVER['REQUEST_URI'], '?').'?r='
-);
-
-
-// Show ref link
-if (array_key_exists('address', $_POST)) {
-    $data["reflink"] .= $_POST['address'];
-} else if (array_key_exists('address', $_COOKIE)) {
-    $data["reflink"] .= $_COOKIE['address'];
-    $data["address"] = $_COOKIE['address'];
-} else {
-    $data["reflink"] .= 'Your_Address';
+.main-input.normal{
+background: #667E94;
+border-color: #465668;
 }
 
+.main-input.normal::-webkit-input-placeholder { color: #415264; }
+.main-input.normal::-moz-placeholder { color: #415264; }
+.main-input.normal:-ms-input-placeholder { color: #415264; }
+.main-input.normal:-moz-placeholder { color: #415264; }
 
-// Get settings from DB
-$q = $sql->query("SELECT name, value FROM Faucetinabox_Settings WHERE name <> 'password'");
-while ($row = $q->fetch()) {
-    if ($row[0] == "safety_limits_end_time") {
-        $time = strtotime($row[1]);
-        if ($time !== false && $time < time()) {
-            $row[1] = "";
-        }
-    }
-    $data[$row[0]] = $row[1];
+.main-input-label{
+display: block;
+margin-bottom: -5px;
+font-size: 20px;
 }
 
-// Update balance
-if (time() - $data['last_balance_check'] > 60*10) {
-    $fb = new Service($data['service'], $data['apikey'], $data['currency'], $connection_options);
-    $ret = $fb->getBalance();
-    if (array_key_exists('balance', $ret)) {
-        if ($data['currency'] != 'DOGE')
-            $balance = $ret['balance'];
-        else
-            $balance = $ret['balance_bitcoin'];
-        $q = $sql->prepare("UPDATE Faucetinabox_Settings SET value = ? WHERE name = ?");
-        $q->execute(array(time(), 'last_balance_check'));
-        $q->execute(array($balance, 'balance'));
-        $data['balance'] = $balance;
-        $data['last_balance_check'] = time();
-    }
+.btn{
+background: #F5B349;
+border: none;
+font-size: 20px;
+font-weight: 500;
+color: #5E3D0A;
+border-bottom: 5px solid #B37C25;
+margin-top: 20px;
+cursor: pointer;
 }
 
+::-webkit-input-placeholder { color: #9C1E2D; }
+::-moz-placeholder { color: #9C1E2D; }
+:-ms-input-placeholder { color: #9C1E2D; }
+input:-moz-placeholder { color: #9C1E2D; }
 
-// Set unit name
-$data['unit'] = 'satoshi';
-if ($data["currency"] == 'DOGE')
-    $data["unit"] = 'DOGE';
-
-
-#MuliCaptcha: Firstly check chosen captcha system
-$captcha = array('available' => array(), 'selected' => null);
-if ($data['solvemedia_challenge_key'] && $data['solvemedia_verification_key'] && $data['solvemedia_auth_key']) {
-    $captcha['available'][] = 'SolveMedia';
-}
-if ($data['recaptcha_public_key'] && $data['recaptcha_private_key']) {
-    $captcha['available'][] = 'reCaptcha';
-}
-if ($data['funcaptcha_public_key'] && $data['funcaptcha_private_key']) {
-    $captcha['available'][] = 'FunCaptcha';
+.ref{
+background: #354455;
+padding: 12px 18px;
+font-size: 20px;
+font-weight: 300;
+border-left: 8px solid #7A8EA1;
+margin-top: 5%;
+margin-bottom: 0;
 }
 
-#MuliCaptcha: Secondly check if user switched captcha or choose default
-if (array_key_exists('cc', $_GET) && in_array($_GET['cc'], $captcha['available'])) {
-    $captcha['selected'] = $captcha['available'][array_search($_GET['cc'], $captcha['available'])];
-    $_SESSION["$session_prefix-selected_captcha"] = $captcha['selected'];
-} elseif (array_key_exists("$session_prefix-selected_captcha", $_SESSION) && in_array($_SESSION["$session_prefix-selected_captcha"], $captcha['available'])) {
-    $captcha['selected'] = $_SESSION["$session_prefix-selected_captcha"];
-} else {
-    if ($captcha['available'])
-        $captcha['selected'] = $captcha['available'][0];
-    if (in_array($data['default_captcha'], $captcha['available'])) {
-        $captcha['selected'] = $data['default_captcha'];
-    } else if ($captcha['available']) {
-        $captcha['selected'] = $captcha['available'][0];
-    }
+.ref .t{
+display: block;
+font-weight: 500;
+color: #7A8EA1;
 }
 
-#MuliCaptcha: And finally handle chosen captcha system
-# -> checkCaptcha()
-switch ($captcha['selected']) {
-    case 'SolveMedia':
-        require_once("libs/solvemedialib.php");
-        $data["captcha"] = solvemedia_get_html($data["solvemedia_challenge_key"], null, is_ssl());
-    break;
-    case 'reCaptcha':
-        $data["captcha"] = str_replace('<:: your_site_key ::>', $data["recaptcha_public_key"], $recaptcha_template);
-    break;
-    case 'FunCaptcha':
-        require_once("libs/funcaptcha.php");
-        $funcaptcha = new FUNCAPTCHA();
-        $data["captcha"] =  $funcaptcha->getFunCaptcha($data["funcaptcha_public_key"]);
-    break;
+#footer{
+margin: 2% 0;
+text-align: center;
+font-weight: 300;
+color: #1F2A35;
 }
 
-$data['captcha_info'] = $captcha;
-
-// Check if faucet's enabled
-if ($data['captcha'] && $data['apikey'] && $data['rewards'])
-    $data['enabled'] = true;
-
-
-// check if IP eligible
-$data["eligible"] = checkTimeForIP(getIP(), $time_left);
-$data['time_left'] = $time_left." minutes";
-
-
-// Rewards
-$rewards = explode(',', $data['rewards']);
-$total_weight = 0;
-$nrewards = array();
-foreach ($rewards as $reward) {
-    $reward = explode("*", trim($reward));
-    if (count($reward) < 2) {
-        $reward[1] = $reward[0];
-        $reward[0] = 1;
-    }
-    $total_weight += intval($reward[0]);
-    $nrewards[] = $reward;
-}
-$rewards = $nrewards;
-if (count($rewards) > 1) {
-    $possible_rewards = array();
-    foreach ($rewards as $r) {
-        $chance_per = 100 * $r[0]/$total_weight;
-        if ($chance_per < 0.1)
-            $chance_per = '< 0.1%';
-        else
-            $chance_per = round(floor($chance_per*10)/10, 1).'%';
-
-        $possible_rewards[] = $r[1]." ($chance_per)";
-    }
-} else {
-    $possible_rewards = array($rewards[0][1]);
+#footer a{
+color: #1F2A35;
 }
 
+.alert{
+color: #FC3A51;
+font-size: 15px;
+font-weight: 500;
+text-transform: uppercase;
+letter-spacing: 2px;
+border-bottom: 1px dashed #FC3A51;
+width: auto;
+display: inline-block;
+}
+
+.alert-success{
+color: #1BA81B;
+border-color: #1BA81B;
+font-weight: normal;
+font-size: 25px;
+}
+
+.alert a{
+color: inherit;
+text-decoration: none;
+font-weight: bold;
+}
+
+#disabled-box{
+text-align: center;
+font-size: 80px;
+font-weight: 500;
+color: #FC3A51;
+margin: 11.2% 0;
+}
+
+#disabled-box .desc{
+font-size: 25px;
+}
+
+#disabled-box a{
+color: #FC3A51;
+}
+
+#recaptcha_area {
+margin: 3% auto 0;
+}
+
+#adcopy-outer {
+margin: 3% auto 0 !important;
+}
+
+.center{
+text-align: center;
+}
+
+#nav{
+background: #1D2C3C;
+margin-bottom: 15px;
+}
+
+#nav ul{
+margin: 0;
+padding: 0;
+list-style: none;
+}
+
+#nav ul li{
+display: inline-block;
+}
+
+#nav ul li a{
+padding: 12px 20px;
+display: inline-block;
+color: #C5C5C5;
+text-decoration: none;
+border-right: 5px solid #151F2D;
+}
+
+.captcha-switcher{
+padding-top: 5px;
+font-size: 12px;
+}
+
+.captcha-switcher a{
+text-decoration: none;
+}
+
+.captcha-switcher b{
+font-weight: 500;
+color: #86ADC3;
+}
+
+#captchme_widget_div{
+margin: 0 auto;
+width: 315px;
+}
+
+.g-recaptcha{
+width: 304px;
+margin: 0 auto;
+margin-top: 20px;
+}
+
+.reklamper-widget-holder{
+margin: auto;
+}
+
+.timer{
+text-align: center;
+font-size: 45px;
+font-weight: 300;
+padding: 30px 0;
+}
+
+</style>
+</head>
+<body>
+<div class="wf">
+	<div id="top-ad">
+		<?php echo $data["custom_top_ad_slot"]; ?>
+	</div>
+	<div id="page">
+		<table id="page-cols">
+			<tr>
+				<td class="page-col-body">
+					<?php if(!empty($data["user_pages"])): ?>
+					<div id="nav">
+						<ul>
+							<li><a href="?">Home</a></li>
+						<?php foreach($data["user_pages"] as $page): ?>
+							<li><a href="?p=<?php echo $page["url_name"]; ?>"><?php echo $page["name"]; ?></a></li>
+						<?php endforeach; ?>
+						</ul>
+					</div>
+					<?php endif; ?>
+					<div id="header">
+						<div class="name"><?php echo $data["name"]; ?></div>
+						<div class="short-desc"><?php echo $data["short"]; ?></div>
+                        <div class="balance">Balance: <?php echo $data["balance"]." ".$data["unit"]; ?></div>
+					</div>
+
+					<?php if($data["page"] != 'user_page'): ?>
+                    <p class="rewards">Possible rewards: <?php echo $data["rewards"]; ?> <span><?php echo $data["unit"]; ?></span></p>
+					<?php endif; ?>
+
+					<div id="main">
+
+						<div class="center">
+						<?php if($data["error"]) echo $data["error"]; ?>
+						</div>
+
+						<?php switch($data["page"]):
+								case "disabled": ?>
+							<div id="disabled-box">
+								<div>FAUCET DISABLED.</div>
+								<div class="desc">Go to <a href="admin.php">admin page</a> and fill all required data!</div>
+							</div>
+						<?php break; case "paid":
+								echo $data["paid"];
+							  break; case "eligible": ?>
+							<form method="POST">
+								<div>
+									<label class="main-input-label">Your address:</label>
+                                    <input type="text" name="address" class="form-control" style="position: absolute; position: fixed; left: -99999px; top: -99999px; opacity: 0; width: 1px; height: 1px">
+                                    <input type="checkbox" name="honeypot" style="position: absolute; position: fixed; left: -99999px; top: -99999px; opacity: 0; width: 1px; height: 1px">
+                                    <input type="text" name="<?php echo $data["address_input_name"]; ?>" class="main-input <?php if($data['custom_input_style']==1) echo 'normal'; ?>" placeholder="i.e. 19ZZ8DZsb5qgchuKPZWET7Uj8rDoj4KgmB" value="<?php echo $data["address"]; ?>" autocomplete="off">
+								</div>
+								<div>
+									<?php echo $data["captcha"]; ?>
+                                    <div class="captcha-switcher">
+                                    <?php
+                                    if (count($data['captcha_info']['available']) > 1) {
+                                        foreach ($data['captcha_info']['available'] as $c) {
+                                            if ($c == $data['captcha_info']['selected']) {
+                                                echo '<b>' .$c. '</b> ';
+                                            } else {
+                                                echo '<a href="?cc='.$c.'">'.$c.'</a> ';
+                                            }
+                                        }
+                                    }
+                                    ?>
+                            </div>
+								</div>
+								<div>
+									<input type="submit" class="btn claim-button" value="Get reward!">
+								</div>
+							</form>
+						<?php break; case "visit_later": ?>
+							<p class="timer">You have to wait <?php echo $data["time_left"]; ?></p>
+						<?php break; case "user_page": ?>
+							<div id="user-page">
+							<h2><?php echo $data["user_page"]["name"]; ?></h2>
+							<?php echo $data["user_page"]["html"]; ?>
+							</div>
+						<?php break; endswitch; ?>
+
+						<?php if($data["referral"]): ?>
+						<p class="ref">
+							<span class="t">Referral commission: <?php echo $data["referral"]; ?>%</span>
+							Reflink: <code><?php echo $data["reflink"]; ?></code>
+						</p>
+						<?php endif; ?>
+					</div>
 
 
-if (array_key_exists('address', $_POST) && $data['enabled'] && $data['eligible']) {
-    
-    $address = trim($_POST["address"]);
-
-    if(empty($data['address']))
-        $data['address'] = $address;
-
-    $error = getClaimError($address);
-    if ($error) {
-        $data["error"] = "<div class=\"alert alert-danger\">{$error}</div>";
-    } else {
-        
-        // Rand amount
-        $r = mt_rand()/mt_getrandmax();
-        $t = 0;
-        foreach ($rewards as $reward) {
-            $t += intval($reward[0])/$total_weight;
-            if ($t > $r) {
-                break;
-            }
-        }
-        if (strpos($reward[1], '-') !== false) {
-            $reward_range = explode('-', $reward[1]);
-            $from = floatval($reward_range[0]);
-            $to = floatval($reward_range[1]);
-            $reward = mt_rand($from, $to);
-        } else {
-            $reward = floatval($reward[1]);
-        }
-        
-        $fb = new Service($data['service'], $data["apikey"], $data["currency"], $connection_options);
-        $ret = $fb->send($address, $reward, getIP());
-        
-        if ($ret['success']) {
-            setcookie('address', trim($_POST['address']), time() + 60*60*24*60);
-            if (!empty($ret['balance'])) {
-                $q = $sql->prepare("UPDATE Faucetinabox_Settings SET `value` = ? WHERE `name` = 'balance'");
-
-                if ($data['unit'] == 'satoshi')
-                    $data['balance'] = $ret['balance'];
-                else
-                    $data['balance'] = $ret['balance_bitcoin'];
-                $q->execute(array($data['balance']));
-            }
-
-            $sql->exec("UPDATE Faucetinabox_Settings SET value = '' WHERE `name` = 'safety_limits_end_time' ");
-
-            // handle refs
-            if (array_key_exists('r', $_GET) && trim($_GET['r']) != $address) {
-                $q = $sql->prepare("INSERT IGNORE INTO Faucetinabox_Refs (address) VALUES (?)");
-                $q->execute(array(trim($_GET["r"])));
-                $q = $sql->prepare("INSERT IGNORE INTO Faucetinabox_Addresses (`address`, `ref_id`, `last_used`) VALUES (?, (SELECT id FROM Faucetinabox_Refs WHERE address = ?), CURRENT_TIMESTAMP())");
-                $q->execute(array(trim($_POST['address']), trim($_GET['r'])));
-            }
-            $refamount = floatval($data['referral'])*$reward/100;
-            $q = $sql->prepare("SELECT address FROM Faucetinabox_Refs WHERE id = (SELECT ref_id FROM Faucetinabox_Addresses WHERE address = ?)");
-            $q->execute(array(trim($_POST['address'])));
-            if ($ref = $q->fetch()) {
-                if (!in_array(trim($ref[0]), $security_settings['address_ban_list'])) {
-                    $fb->sendReferralEarnings(trim($ref[0]), $refamount, getIP());
-                }
-            }
-
-            if ($data['unit'] == 'satoshi')
-                $data['paid'] = $ret['html'];
-            else
-                $data['paid'] = $ret['html_coin'];
-        } else {
-            $response = json_decode($ret["response"]);
-            if ($response && property_exists($response, "status") && $response->status == 450) {
-                // how many minutes until next safety limits reset?
-                $end_minutes  = (date("i") > 30 ? 60 : 30) - date("i");
-                // what date will it be exactly?
-                $end_date = date("Y-m-d H:i:s", time()+$end_minutes*60-date("s"));
-                $sql->prepare("UPDATE Faucetinabox_Settings SET value = ? WHERE `name` = 'safety_limits_end_time' ")->execute([$end_date]);
-            }
-            $data['error'] = $ret['html'];
-        }
-        if ($ret['success'] || $fb->communication_error) {
-            $q = $sql->prepare("INSERT INTO Faucetinabox_IPs (`ip`, `last_used`) VALUES (?, CURRENT_TIMESTAMP()) ON DUPLICATE KEY UPDATE `last_used` = CURRENT_TIMESTAMP()");
-            $q->execute([getIP()]);
-            $q = $sql->prepare("INSERT INTO Faucetinabox_Addresses (`address`, `last_used`) VALUES (?, CURRENT_TIMESTAMP()) ON DUPLICATE KEY UPDATE `last_used` = CURRENT_TIMESTAMP()");
-            $q->execute([$address]);
-
-            // suspicious checks
-            $q = $sql->query("SELECT value FROM Faucetinabox_Settings WHERE name = 'template'");
-            if ($r = $q->fetch()) {
-                if (stripos(file_get_contents('templates/'.$r[0].'/index.php'), 'libs/mmc.js') !== FALSE) {
-                    if ($fake_address_input_used || !empty($_POST["honeypot"])) {
-                  
+				</td>
+				<td class="page-col-ad">
+					<div id="right-ad">
+						<?php echo $data["custom_right_ad_slot"]; ?>
+					</div>
+				</td>
+			</tr>
+		</table>
+	</div>
+	<div id="footer">
+        Powered by <a href="http://faucetinabox.com/" target="_blank">Faucet in a BOX</a>
+        <?php if(!$disable_admin_panel): ?>
+        | <a href="admin.php">Admin Panel</a>
+        <?php endif; ?>
+	</div>
+</div>
+<?php if($data['button_timer']): ?>
+<script type="text/javascript" src="libs/button-timer.js"></script>
+<script> startTimer(<?php echo $data['button_timer']; ?>); </script>
+<?php endif; ?>
+<?php if($data['block_adblock'] == 'on'): ?>
+<script type="text/javascript" src="libs/advertisement.js"></script>
+<script type="text/javascript" src="libs/check.js"></script>
+<?php endif; ?>
+</body>
+</html>
