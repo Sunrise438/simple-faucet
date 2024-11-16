@@ -1,6 +1,6 @@
 <?php
 
-$dbhost = "github.io/Sunrise438";
+$dbhost = "Sunrise438";
 $dbuser = "Sunrise438";
 $dbpass = "MyBiGbOss#8";
 $dbname = "Sunrise438";
