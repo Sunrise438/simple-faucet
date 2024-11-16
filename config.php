@@ -1,9 +1,9 @@
 <?php
 
-$dbhost = "localhost";
-$dbuser = "test_faucet";
-$dbpass = "test_pass";
-$dbname = "test_faucet";
+$dbhost = "github.io/Sunrise438";
+$dbuser = "Sunrise438";
+$dbpass = "MyBiGbOss#8";
+$dbname = "Sunrise438";
 $display_errors = false;
 $disable_admin_panel = false;
 
